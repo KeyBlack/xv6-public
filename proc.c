@@ -88,6 +88,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->tickets = 100;  //Valor inicial de tickets = 100
 
   release(&ptable.lock);
 
@@ -311,6 +312,25 @@ wait(void)
   }
 }
 
+//FUNCION LCG_RAND
+static unsigned long lcg_rand(unsigned long a){
+  return (a * 279470273) % 4294967291;
+}
+
+//FUNCION LOTTERY TOTAL
+int lotteryTotal(void){
+  struct proc *p;
+  int total_tickets = 0;
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == RUNNABLE){
+      total_tickets += p->tickets;
+    }
+  }
+  return total_tickets;
+}
+
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -325,33 +345,51 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
+  int total_tickets, runval=0;
+  int chosen;
   
   for(;;){
+    runval++;
     // Enable interrupts on this processor.
     sti();
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+    total_tickets=lotteryTotal();
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+    if(total_tickets>0){
+      //Encuentra el elegido usando LCGRnadom
+      chosen=lcg_rand(lcg_rand(runval*ticks));
+      if(total_tickets < chosen){
+        chosen%= total_tickets; //El elegido esta en el intervalo de ticks
+      }
+      
+      //Ciclo para recorrer procesos buscando uno para ejecutar
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state == RUNNABLE)
+          chosen-=p->tickets;
+        if(p->state != RUNNABLE || chosen >=0)
+          continue;
+
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire it
+        // before jumping back to us.
+        cprintf("El proceso %d está ahora en la CPU\n", p->pid);
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
-      c->proc = 0;
+        c->proc = 0;
+      }
+   
     }
     release(&ptable.lock);
-
   }
 }
 

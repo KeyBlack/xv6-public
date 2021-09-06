@@ -7,6 +7,9 @@
 #include "mmu.h"
 #include "proc.h"
 
+//Contador de llamadas a sistema
+unsigned int count = 0;
+
 int
 sys_fork(void)
 {
@@ -88,4 +91,8 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+int sys_csc(void){
+  return count;
 }
